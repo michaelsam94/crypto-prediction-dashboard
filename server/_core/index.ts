@@ -8,6 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { candleCycleHandler, retrainHandler } from "../market/scheduledHandlers";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -44,6 +45,10 @@ async function startServer() {
       createContext,
     })
   );
+  // Scheduled (Heartbeat) endpoints. Must be registered before the Vite/static
+  // fallthrough — `/api/scheduled/*` is not auto-mounted.
+  app.post("/api/scheduled/candleCycle", candleCycleHandler);
+  app.post("/api/scheduled/retrain", retrainHandler);
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

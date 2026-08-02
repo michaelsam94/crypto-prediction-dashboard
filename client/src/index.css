@@ -40,77 +40,120 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-long: var(--long);
+  --color-long-muted: var(--long-muted);
+  --color-short: var(--short);
+  --color-short-muted: var(--short-muted);
+  --color-neutral-signal: var(--neutral-signal);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
+  --color-grid-line: var(--grid-line);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  /**
+   * Trading-terminal palette. The app runs dark-only, so `:root` and `.dark`
+   * carry the same values — this prevents any flash of light theme and keeps
+   * semantic tokens resolving correctly regardless of the class on <html>.
+   */
+  --radius: 0.5rem;
+
+  /* Deep neutral base with a faint blue cast, typical of trading terminals. */
+  --background: oklch(0.165 0.012 265);
+  --foreground: oklch(0.93 0.008 250);
+  --panel: oklch(0.205 0.014 265);
+  --panel-raised: oklch(0.245 0.016 265);
+  --grid-line: oklch(1 0 0 / 7%);
+
+  --card: oklch(0.205 0.014 265);
+  --card-foreground: oklch(0.93 0.008 250);
+  --popover: oklch(0.225 0.015 265);
+  --popover-foreground: oklch(0.93 0.008 250);
+
+  /* Amber accent reads as "instrumentation" rather than generic SaaS blue. */
+  --primary: oklch(0.78 0.15 78);
+  --primary-foreground: oklch(0.18 0.02 265);
+
+  --secondary: oklch(0.26 0.016 265);
+  --secondary-foreground: oklch(0.88 0.008 250);
+  --muted: oklch(0.26 0.016 265);
+  --muted-foreground: oklch(0.66 0.014 258);
+  --accent: oklch(0.29 0.02 265);
+  --accent-foreground: oklch(0.95 0.008 250);
+
+  --destructive: oklch(0.62 0.21 22);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.78 0.15 78 / 60%);
+
+  /* Signal semantics: green = LONG, red = SHORT, slate = NEUTRAL. */
+  --long: oklch(0.74 0.19 152);
+  --long-muted: oklch(0.74 0.19 152 / 14%);
+  --short: oklch(0.66 0.22 22);
+  --short-muted: oklch(0.66 0.22 22 / 14%);
+  --neutral-signal: oklch(0.68 0.02 258);
+
+  --chart-1: oklch(0.74 0.19 152);
+  --chart-2: oklch(0.66 0.22 22);
+  --chart-3: oklch(0.78 0.15 78);
+  --chart-4: oklch(0.66 0.13 240);
+  --chart-5: oklch(0.7 0.12 300);
+
+  --sidebar: oklch(0.185 0.013 265);
+  --sidebar-foreground: oklch(0.9 0.008 250);
+  --sidebar-primary: oklch(0.78 0.15 78);
+  --sidebar-primary-foreground: oklch(0.18 0.02 265);
+  --sidebar-accent: oklch(0.27 0.018 265);
+  --sidebar-accent-foreground: oklch(0.95 0.008 250);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.78 0.15 78 / 60%);
 }
 
 .dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
+  --background: oklch(0.165 0.012 265);
+  --foreground: oklch(0.93 0.008 250);
+  --panel: oklch(0.205 0.014 265);
+  --panel-raised: oklch(0.245 0.016 265);
+  --grid-line: oklch(1 0 0 / 7%);
+  --card: oklch(0.205 0.014 265);
+  --card-foreground: oklch(0.93 0.008 250);
+  --popover: oklch(0.225 0.015 265);
+  --popover-foreground: oklch(0.93 0.008 250);
+  --primary: oklch(0.78 0.15 78);
+  --primary-foreground: oklch(0.18 0.02 265);
+  --secondary: oklch(0.26 0.016 265);
+  --secondary-foreground: oklch(0.88 0.008 250);
+  --muted: oklch(0.26 0.016 265);
+  --muted-foreground: oklch(0.66 0.014 258);
+  --accent: oklch(0.29 0.02 265);
+  --accent-foreground: oklch(0.95 0.008 250);
+  --destructive: oklch(0.62 0.21 22);
+  --destructive-foreground: oklch(0.98 0 0);
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.78 0.15 78 / 60%);
+  --long: oklch(0.74 0.19 152);
+  --long-muted: oklch(0.74 0.19 152 / 14%);
+  --short: oklch(0.66 0.22 22);
+  --short-muted: oklch(0.66 0.22 22 / 14%);
+  --neutral-signal: oklch(0.68 0.02 258);
+  --chart-1: oklch(0.74 0.19 152);
+  --chart-2: oklch(0.66 0.22 22);
+  --chart-3: oklch(0.78 0.15 78);
+  --chart-4: oklch(0.66 0.13 240);
+  --chart-5: oklch(0.7 0.12 300);
+  --sidebar: oklch(0.185 0.013 265);
+  --sidebar-foreground: oklch(0.9 0.008 250);
+  --sidebar-primary: oklch(0.78 0.15 78);
+  --sidebar-primary-foreground: oklch(0.18 0.02 265);
+  --sidebar-accent: oklch(0.27 0.018 265);
+  --sidebar-accent-foreground: oklch(0.95 0.008 250);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.78 0.15 78 / 60%);
 }
 
 @layer base {
@@ -119,6 +162,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -172,6 +216,42 @@
       padding-left: 2rem; /* 32px - desktop padding */
       padding-right: 2rem;
       max-width: 1280px; /* Standard content width */
+    }
+  }
+
+  /**
+   * Tabular numerals for every price, percentage, and countdown so digits do
+   * not jitter as values tick. Applied via a utility class rather than globally
+   * to keep prose text using proportional figures.
+   */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* Subtle scanline texture that reads as terminal hardware, not decoration. */
+  .terminal-grid {
+    background-image:
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}
+
+@layer utilities {
+  /* Live-status pulse used on the connection indicator. */
+  @keyframes signal-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .animate-signal-pulse {
+    animation: signal-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-signal-pulse {
+      animation: none;
     }
   }
 }

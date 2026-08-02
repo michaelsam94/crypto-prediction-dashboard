@@ -1,0 +1,1 @@
+ALTER TABLE `models` MODIFY COLUMN `payload` longtext NOT NULL;

@@ -1,5 +1,27 @@
 {
   "version": "7",
   "dialect": "mysql",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1785628638104,
+      "tag": "0000_ordinary_phalanx",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1785628979006,
+      "tag": "0001_known_warpath",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1785632799426,
+      "tag": "0002_quiet_ted_forrester",
+      "breakpoints": true
+    }
+  ]
 }
