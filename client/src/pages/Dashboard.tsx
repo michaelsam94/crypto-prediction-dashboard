@@ -6,7 +6,9 @@ import { useCountdown } from "@/hooks/useCountdown";
 import { formatCountdown, formatRate } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { ACCURACY_WINDOW, TARGET_ACCURACY_MAX, TARGET_ACCURACY_MIN, formatUtc } from "@shared/market";
-import { AlertTriangle, Clock, Radio, TrendingUp } from "lucide-react";
+import { AlertTriangle, Clock, FlaskConical, ListFilter, Radio, TrendingUp } from "lucide-react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 
 /**
  * Module-level constant so the query input keeps a stable reference across
@@ -69,6 +71,18 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-4">
+            <Link href="/screener">
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <ListFilter size={13} />
+                <span className="hidden sm:inline">Screener</span>
+              </Button>
+            </Link>
+            <Link href="/backtest">
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <FlaskConical size={13} />
+                <span className="hidden sm:inline">Backtest</span>
+              </Button>
+            </Link>
             <div className="hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:flex">
               <Radio size={12} className="animate-signal-pulse text-[var(--long)]" />
               <span>Live</span>
@@ -94,9 +108,9 @@ export default function Dashboard() {
         {/* Summary strip */}
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatTile
-            label="Actionable signals"
+            label="ML gate cleared"
             value={overviewPending ? null : `${signalCount} / ${pairs.length}`}
-            hint="Pairs whose confidence clears their validated gate"
+            hint="Pairs whose ML confidence clears their validated gate. The cards show the blended call, which is what is traded — the gate applies to the ML half only."
           />
           <StatTile
             label={`Win rate · last ${ACCURACY_WINDOW}`}

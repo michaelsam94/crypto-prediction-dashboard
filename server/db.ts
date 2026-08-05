@@ -1,7 +1,13 @@
-import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   candles,
+  fearGreed,
+  fundingRates,
+  openInterest,
+  type InsertFearGreed,
+  type InsertFundingRate,
+  type InsertOpenInterest,
   InsertCandle,
   InsertModel,
   InsertPrediction,
@@ -234,6 +240,38 @@ export async function getLatestPredictionPerSymbol(symbols: string[]) {
   return Array.from(seen.values());
 }
 
+/** Every prediction for a symbol whose target bar falls inside [from, to]. */
+export async function getPredictionsInRange(symbol: string, from: number, to: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(predictions)
+    .where(
+      and(
+        eq(predictions.symbol, symbol),
+        gte(predictions.targetOpenTime, from),
+        lte(predictions.targetOpenTime, to),
+      ),
+    )
+    .orderBy(asc(predictions.targetOpenTime));
+}
+
+/** The earliest and latest target bar with a stored prediction, for UI bounds. */
+export async function getPredictionRange(): Promise<{ min: number; max: number } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({
+      min: sql<number>`min(${predictions.targetOpenTime})`,
+      max: sql<number>`max(${predictions.targetOpenTime})`,
+    })
+    .from(predictions);
+  const r = rows[0];
+  if (!r || r.min === null || r.max === null) return null;
+  return { min: Number(r.min), max: Number(r.max) };
+}
+
 /** Predictions still awaiting an outcome, oldest first. */
 export async function getPendingPredictions(limit = 500) {
   const db = await getDb();
@@ -364,4 +402,107 @@ export async function getLastSuccessfulRun(job: string) {
     .orderBy(desc(jobRuns.startedAt))
     .limit(1);
   return rows[0];
+}
+
+/* ------------------------------------------------------------------ */
+/* Non-price series: funding, open interest, Fear & Greed              */
+/* ------------------------------------------------------------------ */
+
+export async function upsertFundingRates(rows: InsertFundingRate[]): Promise<number> {
+  const db = await getDb();
+  if (!db || rows.length === 0) return 0;
+  const chunk = 500;
+  let written = 0;
+  for (let i = 0; i < rows.length; i += chunk) {
+    await db
+      .insert(fundingRates)
+      .values(rows.slice(i, i + chunk))
+      .onDuplicateKeyUpdate({
+        set: { fundingRate: sql`values(fundingRate)`, markPrice: sql`values(markPrice)` },
+      });
+    written += Math.min(chunk, rows.length - i);
+  }
+  return written;
+}
+
+export async function getFundingRates(symbol: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(fundingRates)
+    .where(eq(fundingRates.symbol, symbol))
+    .orderBy(asc(fundingRates.fundingTime));
+}
+
+export async function upsertOpenInterest(rows: InsertOpenInterest[]): Promise<number> {
+  const db = await getDb();
+  if (!db || rows.length === 0) return 0;
+  const chunk = 500;
+  let written = 0;
+  for (let i = 0; i < rows.length; i += chunk) {
+    await db
+      .insert(openInterest)
+      .values(rows.slice(i, i + chunk))
+      .onDuplicateKeyUpdate({
+        set: {
+          openInterest: sql`values(openInterest)`,
+          openInterestValue: sql`values(openInterestValue)`,
+        },
+      });
+    written += Math.min(chunk, rows.length - i);
+  }
+  return written;
+}
+
+export async function upsertFearGreed(rows: InsertFearGreed[]): Promise<number> {
+  const db = await getDb();
+  if (!db || rows.length === 0) return 0;
+  const chunk = 500;
+  let written = 0;
+  for (let i = 0; i < rows.length; i += chunk) {
+    await db
+      .insert(fearGreed)
+      .values(rows.slice(i, i + chunk))
+      .onDuplicateKeyUpdate({
+        set: { value: sql`values(value)`, classification: sql`values(classification)` },
+      });
+    written += Math.min(chunk, rows.length - i);
+  }
+  return written;
+}
+
+export async function getFearGreed() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(fearGreed).orderBy(asc(fearGreed.day));
+}
+
+/**
+ * Symbols that can be backtested: anything with a trained model AND stored
+ * predictions. This is deliberately wider than TRACKED_SYMBOLS (the six pairs
+ * with dashboard cards) — a pair can be backtestable without being displayed.
+ */
+export async function getBacktestSymbols(): Promise<
+  Array<{ symbol: string; predictions: number; first: number; last: number }>
+> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      symbol: predictions.symbol,
+      predictions: sql<number>`count(*)`,
+      first: sql<number>`min(${predictions.targetOpenTime})`,
+      last: sql<number>`max(${predictions.targetOpenTime})`,
+    })
+    .from(predictions)
+    .groupBy(predictions.symbol);
+  return rows
+    .map(r => ({
+      symbol: r.symbol,
+      predictions: Number(r.predictions),
+      first: Number(r.first),
+      last: Number(r.last),
+    }))
+    .sort((a, b) => a.symbol.localeCompare(b.symbol));
 }

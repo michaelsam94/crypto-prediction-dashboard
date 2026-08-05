@@ -4,6 +4,8 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import Backtest from "./pages/Backtest";
+import Screener from "./pages/Screener";
 import Dashboard from "./pages/Dashboard";
 import PairDetail from "./pages/PairDetail";
 
@@ -11,6 +13,8 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Dashboard} />
+      <Route path={"/backtest"} component={Backtest} />
+      <Route path={"/screener"} component={Screener} />
       <Route path={"/pair/:symbol"} component={PairDetail} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

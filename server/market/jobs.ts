@@ -1,5 +1,13 @@
 import { TRACKED_SYMBOLS } from "@shared/market";
-import { finishJobRun, getModel, startJobRun } from "../db";
+import {
+  finishJobRun,
+  getModel,
+  startJobRun,
+  upsertFearGreed,
+  upsertFundingRates,
+  upsertOpenInterest,
+} from "../db";
+import { fetchFearGreed, fetchFundingHistory, fetchOpenInterest } from "./altdata";
 import {
   loadMarketContext,
   predictSymbol,
@@ -121,4 +129,69 @@ export async function runBootstrap(replayCount = 100): Promise<{
   }
 
   return { synced, trained, seeded, predictions };
+}
+
+export type AltDataSummary = {
+  fearGreed: number;
+  funding: Record<string, number>;
+  openInterest: Record<string, number>;
+  oiWindowDays: number | null;
+};
+
+/**
+ * Refresh the non-price series.
+ *
+ * The reason this needs a SCHEDULE rather than a one-off backfill is open
+ * interest: Binance's `openInterestHist` only serves the trailing 30 days, so
+ * history exists only if it is collected as it happens. Miss a month and that
+ * month is gone permanently. Funding and Fear & Greed are re-fetched too — both
+ * are cheap and idempotent, and keeping them current means the feature set can
+ * be switched on later without a backfill.
+ */
+export async function runAltDataSync(): Promise<AltDataSummary> {
+  const fng = await fetchFearGreed();
+  const fearGreedWritten = await upsertFearGreed(
+    fng.map(p => ({ day: p.day, value: p.value, classification: p.classification })),
+  );
+
+  const funding: Record<string, number> = {};
+  const openInterestCounts: Record<string, number> = {};
+  let oldestOi: number | null = null;
+  let newestOi: number | null = null;
+
+  for (const symbol of TRACKED_SYMBOLS) {
+    const rates = await fetchFundingHistory(symbol);
+    funding[symbol] = await upsertFundingRates(
+      rates.map(r => ({
+        symbol,
+        fundingTime: r.fundingTime,
+        fundingRate: r.fundingRate,
+        markPrice: r.markPrice,
+      })),
+    );
+
+    const oi = await fetchOpenInterest(symbol);
+    openInterestCounts[symbol] = await upsertOpenInterest(
+      oi.map(r => ({
+        symbol,
+        ts: r.ts,
+        openInterest: r.openInterest,
+        openInterestValue: r.openInterestValue,
+      })),
+    );
+    if (oi.length > 0) {
+      oldestOi = oldestOi === null ? oi[0].ts : Math.min(oldestOi, oi[0].ts);
+      newestOi = newestOi === null ? oi[oi.length - 1].ts : Math.max(newestOi, oi[oi.length - 1].ts);
+    }
+  }
+
+  return {
+    fearGreed: fearGreedWritten,
+    funding,
+    openInterest: openInterestCounts,
+    oiWindowDays:
+      oldestOi !== null && newestOi !== null
+        ? Math.round((newestOi - oldestOi) / 86_400_000)
+        : null,
+  };
 }

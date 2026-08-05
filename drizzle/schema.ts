@@ -161,3 +161,70 @@ export const jobRuns = mysqlTable(
 );
 
 export type JobRun = typeof jobRuns.$inferSelect;
+
+/**
+ * Binance funding rate, one row per settlement (every 8h).
+ * Full history is available from listing, so this can back a feature.
+ */
+export const fundingRates = mysqlTable(
+  "funding_rates",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    symbol: varchar("symbol", { length: 32 }).notNull(),
+    fundingTime: bigint("fundingTime", { mode: "number" }).notNull(),
+    fundingRate: double("fundingRate").notNull(),
+    markPrice: double("markPrice"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    symbolTimeIdx: uniqueIndex("funding_symbol_time_idx").on(table.symbol, table.fundingTime),
+  }),
+);
+
+export type FundingRate = typeof fundingRates.$inferSelect;
+export type InsertFundingRate = typeof fundingRates.$inferInsert;
+
+/**
+ * Open interest snapshots.
+ *
+ * Binance's `openInterestHist` only serves the trailing 30 days, so this table
+ * cannot be backfilled across the model's history. It is collected forward on a
+ * schedule so a usable series accumulates; until it spans enough history it is
+ * deliberately NOT wired into the feature matrix.
+ */
+export const openInterest = mysqlTable(
+  "open_interest",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    symbol: varchar("symbol", { length: 32 }).notNull(),
+    ts: bigint("ts", { mode: "number" }).notNull(),
+    openInterest: double("openInterest").notNull(),
+    openInterestValue: double("openInterestValue"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    symbolTsIdx: uniqueIndex("oi_symbol_ts_idx").on(table.symbol, table.ts),
+  }),
+);
+
+export type OpenInterest = typeof openInterest.$inferSelect;
+export type InsertOpenInterest = typeof openInterest.$inferInsert;
+
+/**
+ * Crypto Fear & Greed index (alternative.me), one global value per UTC day.
+ * History runs from 2018-02-01, so it covers the full model window.
+ */
+export const fearGreed = mysqlTable(
+  "fear_greed",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    /** UTC midnight of the day the reading belongs to. */
+    day: bigint("day", { mode: "number" }).notNull().unique(),
+    value: int("value").notNull(),
+    classification: varchar("classification", { length: 32 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+);
+
+export type FearGreed = typeof fearGreed.$inferSelect;
+export type InsertFearGreed = typeof fearGreed.$inferInsert;

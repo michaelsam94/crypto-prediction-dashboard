@@ -29,6 +29,15 @@ export type PairData = {
     outcome: string;
     passesGate: boolean;
   } | null;
+  blend: {
+    direction: "LONG" | "SHORT";
+    score: number;
+    confidence: number;
+    ml: number;
+    ta: number | null;
+    weight: number;
+    agreesWithMl: boolean;
+  } | null;
   accuracy: {
     winRate: number | null;
     wins: number;
@@ -67,14 +76,13 @@ export function PredictionCard({
   targetMax: number;
 }) {
   const prediction = pair.prediction;
+  const blend = pair.blend;
 
-  // A call below the model's validated confidence gate is surfaced as NEUTRAL:
-  // the model has an opinion but not enough conviction to act on.
-  const state: SignalState = !prediction
-    ? "NEUTRAL"
-    : prediction.passesGate
-      ? prediction.direction
-      : "NEUTRAL";
+  // The headline is the BLENDED call, because that is what the live rig and the
+  // backtest trade. This card used to show the ML-only direction, which meant
+  // the dashboard could read SHORT while the bot went LONG on the same bar
+  // whenever the TA component outweighed the model.
+  const state: SignalState = blend ? blend.direction : "NEUTRAL";
 
   const accent =
     state === "LONG" ? "var(--long)" : state === "SHORT" ? "var(--short)" : "var(--neutral-signal)";
@@ -125,20 +133,74 @@ export function PredictionCard({
             <SignalBadge state={state} size="md" />
             <div className="text-right">
               <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-                Confidence
+                Blend score
               </p>
               <p className="tnum text-sm font-semibold" style={{ color: accent }}>
-                {prediction ? formatRate(prediction.confidence) : "—"}
+                {blend ? `${blend.score >= 0 ? "+" : ""}${blend.score.toFixed(4)}` : "—"}
               </p>
             </div>
           </div>
+
+          {/* Component breakdown — which half is driving the call, and whether
+              they agree. A blend near zero with the parts pulling opposite ways
+              is a coin flip wearing a direction. */}
+          {blend && (
+            <div className="mt-2.5 grid grid-cols-2 gap-2 text-[11px]">
+              <div className="rounded border border-border/50 px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  ML · {formatRate(blend.weight, 0)}
+                </p>
+                <p
+                  className="tnum font-medium"
+                  style={{ color: blend.ml >= 0 ? "var(--long)" : "var(--short)" }}>
+                  {blend.ml >= 0 ? "+" : ""}
+                  {blend.ml.toFixed(4)}
+                  <span className="ml-1 text-[10px] text-muted-foreground">
+                    {blend.ml >= 0 ? "LONG" : "SHORT"}
+                  </span>
+                </p>
+              </div>
+              <div className="rounded border border-border/50 px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  TA · {formatRate(1 - blend.weight, 0)}
+                </p>
+                <p
+                  className="tnum font-medium"
+                  style={{
+                    color:
+                      blend.ta === null
+                        ? "var(--muted-foreground)"
+                        : blend.ta >= 0
+                          ? "var(--long)"
+                          : "var(--short)",
+                  }}>
+                  {blend.ta === null ? "—" : `${blend.ta >= 0 ? "+" : ""}${blend.ta.toFixed(4)}`}
+                  {blend.ta !== null && (
+                    <span className="ml-1 text-[10px] text-muted-foreground">
+                      {blend.ta >= 0 ? "LONG" : "SHORT"}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {blend && !blend.agreesWithMl && (
+            <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
+              <Info size={12} className="mt-px shrink-0" />
+              <span>
+                TA outweighs the model here — the ML call alone is{" "}
+                {prediction?.direction ?? "—"}, the traded blend is {blend.direction}.
+              </span>
+            </p>
+          )}
 
           {prediction && !prediction.passesGate && (
             <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground">
               <Info size={12} className="mt-px shrink-0" />
               <span>
-                Raw lean {prediction.direction} at {formatRate(prediction.confidence)}, below this
-                pair&apos;s {formatRate(pair.model?.confidenceThreshold ?? 0.5, 0)} gate — stand aside.
+                ML confidence {formatRate(prediction.confidence)} is below this pair&apos;s{" "}
+                {formatRate(pair.model?.confidenceThreshold ?? 0.5, 0)} gate.
               </span>
             </p>
           )}

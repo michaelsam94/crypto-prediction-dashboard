@@ -3,6 +3,7 @@ import {
   buildFeatureMatrix,
   buildLabels,
   FEATURE_NAMES,
+  type ExtraContext,
   type FeatureRow,
   type MarketContext,
 } from "./features";
@@ -61,8 +62,12 @@ export type Dataset = {
  * Assemble a supervised dataset: features from candle i, label from candle i+1.
  * Rows whose label is unknown (the newest candle) are dropped.
  */
-export function buildDataset(candles: Kline[], context?: MarketContext): Dataset {
-  const rows = buildFeatureMatrix(candles, context);
+export function buildDataset(
+  candles: Kline[],
+  context?: MarketContext,
+  extras?: ExtraContext,
+): Dataset {
+  const rows = buildFeatureMatrix(candles, context, extras);
   const labels = buildLabels(candles, rows);
   const keptRows: FeatureRow[] = [];
   const X: number[][] = [];

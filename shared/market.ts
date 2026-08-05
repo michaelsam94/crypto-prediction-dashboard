@@ -1,5 +1,22 @@
-/** The six Binance Futures USDC-margined perpetual pairs tracked by this dashboard. */
+/**
+ * Pairs the dashboard displays and the 4H cycle keeps current.
+ *
+ * These are the USDC perps the live trading bot actually trades.
+ *
+ * Seven USDT pairs (ETH, LINK, ADA, DOGE, 1000SHIB, AAVE, BNB) were removed on
+ * 2026-08-04. They had been added as "observation-only, ranked by margin over
+ * break-even" on >=3,000 out-of-sample predictions — but those predictions were
+ * a one-off backfill that stopped between 2022 and 2024, and the recurring sync
+ * never advanced them (see syncSymbol). So they were never actually observed:
+ * they burned retrain time every cycle, predicted against a "current" bar years
+ * in the past, and displayed a stale win rate that read like live performance.
+ * Re-add them only once their candles are genuinely current.
+ *
+ * Adding a symbol here is not free — the daily retrain and every 4H cycle cover
+ * this list, so it grows roughly linearly with length (~30s of retrain per pair).
+ */
 export const TRACKED_SYMBOLS = [
+  // Live-traded (USDC)
   "WLDUSDC",
   "WIFUSDC",
   "1000BONKUSDC",
@@ -19,6 +36,15 @@ export const SYMBOL_LABELS: Record<string, string> = {
   SUIUSDC: "Sui",
   DOGEUSDC: "Dogecoin",
 };
+
+/**
+ * ML weight in the blended signal; the remainder goes to the TA composite.
+ *
+ * One constant because three places have to agree on it: the dashboard, the
+ * backtest, and the live rig's `W_ML`. When they drifted apart, the home page
+ * showed a direction nothing actually traded.
+ */
+export const DEFAULT_BLEND_WEIGHT = 0.6;
 
 export const INTERVAL = "4h" as const;
 

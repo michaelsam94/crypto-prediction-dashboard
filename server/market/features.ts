@@ -56,6 +56,16 @@ export const FEATURE_NAMES = [
   "btc_realized_vol20",
   "btc_body_pct",
   "btc_ema21_distance",
+
+  // Non-price context. Funding is the only one of these the campaign has ever
+  // validated as a standalone edge; Fear & Greed is included to be measured,
+  // not because it is expected to help.
+  "funding_bps",
+  "funding_bps_mean24h",
+  "funding_bps_delta",
+  "fng_centred",
+  "fng_delta_1d",
+  "fng_vs_ma7",
 ] as const;
 
 export type FeatureName = (typeof FEATURE_NAMES)[number];
@@ -74,6 +84,12 @@ export type MarketContext = Map<number, number[]>;
 
 /** Number of values in the BTC context block. */
 export const CONTEXT_FEATURE_COUNT = 6;
+
+/** Funding (3) + Fear & Greed (3). Open interest is excluded: see altdata.ts. */
+export const EXTRA_FEATURE_COUNT = 6;
+
+/** Per-bar non-price features, keyed by candle openTime. */
+export type ExtraContext = Map<number, number[]>;
 
 /**
  * Derive the BTC context block for every candle in a BTC series.
@@ -111,6 +127,12 @@ export function buildMarketContext(btcCandles: Kline[]): MarketContext {
 /** Neutral fallback used when BTC data is missing for a timestamp. */
 const NEUTRAL_CONTEXT = new Array(CONTEXT_FEATURE_COUNT).fill(0) as number[];
 
+/**
+ * Neutral fill when a bar has no funding/F&G data. Zero is the correct neutral
+ * here because every one of these features is expressed as a deviation.
+ */
+const NEUTRAL_EXTRA = new Array(EXTRA_FEATURE_COUNT).fill(0) as number[];
+
 function safeDiv(a: number, b: number, fallback = 0): number {
   return b === 0 || !Number.isFinite(b) ? fallback : a / b;
 }
@@ -127,7 +149,11 @@ function clean(x: number | null | undefined, fallback = 0): number {
  * exactly the information available when predicting candle `i + 1`. No forward
  * values are ever referenced, so the matrix is leakage-free by construction.
  */
-export function buildFeatureMatrix(candles: Kline[], context?: MarketContext): FeatureRow[] {
+export function buildFeatureMatrix(
+  candles: Kline[],
+  context?: MarketContext,
+  extras?: ExtraContext,
+): FeatureRow[] {
   const n = candles.length;
   if (n === 0) return [];
 
@@ -234,6 +260,9 @@ export function buildFeatureMatrix(candles: Kline[], context?: MarketContext): F
 
     const ctxValues = context?.get(c.openTime) ?? NEUTRAL_CONTEXT;
     values.push(...ctxValues);
+
+    const extraValues = extras?.get(c.openTime) ?? NEUTRAL_EXTRA;
+    values.push(...extraValues);
 
     rows.push({ openTime: c.openTime, values: values.map(v => (Number.isFinite(v) ? v : 0)) });
   }

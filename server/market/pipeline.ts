@@ -33,6 +33,11 @@ export const CONTEXT_SYMBOL = "BTCUSDT";
 /** All symbols that need candle data stored: the six tracked pairs plus BTC. */
 export const ALL_DATA_SYMBOLS = [...TRACKED_SYMBOLS, CONTEXT_SYMBOL];
 
+/** Candles per request while catching a symbol up. Binance caps klines at 1500. */
+const SYNC_PAGE_SIZE = 1000;
+/** Ceiling on pages per symbol per sync — ~18 years of 4H bars, then stop. */
+const MAX_SYNC_PAGES = 40;
+
 function toInsertCandles(symbol: string, klines: Kline[]): InsertCandle[] {
   return klines.map(k => ({
     symbol,
@@ -86,11 +91,38 @@ export async function syncSymbol(symbol: string): Promise<{ fetched: number; ups
     return { fetched: upserted, upserted };
   }
 
-  // Re-fetch from a few candles back so any late-revised candle is corrected.
-  const startTime = latest - CANDLE_MS * 5;
-  const fresh = closedOnly(await fetchKlines(symbol, { startTime, limit: 200 }));
-  const upserted = await upsertCandles(toInsertCandles(symbol, fresh));
-  return { fetched: fresh.length, upserted };
+  // Page forward until the symbol reaches the present.
+  //
+  // This used to be a single 200-candle fetch, which advances at most ~32 days
+  // per cycle. A pair onboarded with a fixed historical window therefore never
+  // caught up: it kept predicting against a "current" bar years in the past
+  // while its model retrained daily on stale candles, and the dashboard showed
+  // its old resolved win rate as though it were live performance.
+  //
+  // In the steady state this still costs one request: the first page returns
+  // the handful of bars since the last sync and the cursor check exits.
+  const target = lastClosedCandleOpen();
+  let cursor = latest - CANDLE_MS * 5; // re-fetch a few back so revisions land
+  let fetched = 0;
+  let upserted = 0;
+
+  for (let page = 0; page < MAX_SYNC_PAGES; page++) {
+    const batch = closedOnly(
+      await fetchKlines(symbol, { startTime: cursor, limit: SYNC_PAGE_SIZE }),
+    );
+    if (batch.length === 0) break;
+    fetched += batch.length;
+    upserted += await upsertCandles(toInsertCandles(symbol, batch));
+
+    const newest = batch[batch.length - 1].openTime;
+    // No forward progress means the feed has nothing newer; stop rather than
+    // spin on the same page until MAX_SYNC_PAGES.
+    if (newest < cursor) break;
+    cursor = newest + CANDLE_MS;
+    if (cursor > target) break;
+  }
+
+  return { fetched, upserted };
 }
 
 /** Sync every data symbol sequentially to stay friendly to Binance rate limits. */
