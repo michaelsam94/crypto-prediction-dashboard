@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
 import { formatUtc } from "@shared/market";
 import { AlertTriangle, ArrowLeft, CalendarDays, Play, TrendingDown, TrendingUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -69,6 +69,121 @@ const pct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
 
 function toDateInput(ms: number) {
   return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * Format a Date by its LOCAL calendar fields.
+ *
+ * toDateInput goes through toISOString, which is right for server timestamps
+ * but wrong for a date the user typed: parsing "2021-04-10" builds a local
+ * midnight, and in any timezone ahead of UTC that renders back as 2021-04-09.
+ * The submit path already reads local getFullYear/getMonth/getDate, so the
+ * field has to agree with it.
+ */
+function toLocalDateInput(d: Date) {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
+ * A date you can type OR pick.
+ *
+ * The text box holds its own draft so a half-typed "2021-04-1" is not rejected
+ * mid-keystroke; the date is only committed once the draft parses as a full
+ * YYYY-MM-DD. On blur an unparseable draft snaps back to the current date
+ * rather than silently leaving the field disagreeing with the run.
+ */
+function DateField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+}: {
+  label: string;
+  value: Date | undefined;
+  onChange: (d: Date | undefined) => void;
+  min?: number | null;
+  max?: number | null;
+}) {
+  const [text, setText] = useState(value ? toLocalDateInput(value) : "");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setText(value ? toLocalDateInput(value) : "");
+  }, [value]);
+
+  const parse = (raw: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
+    if (!m) return undefined;
+    const [y, mo, d] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])];
+    const date = new Date(y, mo, d);
+    // Reject 2021-02-31 and friends: Date rolls them over silently.
+    if (date.getFullYear() !== y || date.getMonth() !== mo || date.getDate() !== d) {
+      return undefined;
+    }
+    return date;
+  };
+
+  const draft = parse(text);
+  const malformed = text.trim().length > 0 && !draft;
+  const outOfRange =
+    draft !== undefined &&
+    ((min != null && draft.getTime() < min - DAY_MS) || (max != null && draft.getTime() > max));
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div className="flex items-center gap-1">
+        <Input
+          value={text}
+          onChange={e => {
+            setText(e.target.value);
+            const d = parse(e.target.value);
+            if (d) onChange(d);
+          }}
+          onBlur={() => {
+            if (!draft && value) setText(toLocalDateInput(value));
+          }}
+          placeholder="YYYY-MM-DD"
+          inputMode="numeric"
+          aria-label={`${label} date, YYYY-MM-DD`}
+          className={`w-[132px] font-mono ${
+            malformed || outOfRange ? "border-[var(--short)]" : ""
+          }`}
+        />
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              aria-label={`Pick ${label} date from calendar`}
+              className="h-9 w-9 shrink-0 p-0">
+              <CalendarDays className="h-4 w-4 opacity-60" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={value}
+              onSelect={d => {
+                if (d) onChange(d);
+                setOpen(false);
+              }}
+              defaultMonth={value}
+              disabled={d =>
+                (min != null ? d.getTime() < min - DAY_MS : false) ||
+                (max != null ? d.getTime() > max : false)
+              }
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+      {malformed && <p className="text-[11px] text-[var(--short)]">Use YYYY-MM-DD</p>}
+      {outOfRange && (
+        <p className="text-[11px] text-[var(--short)]">Outside the stored signal range</p>
+      )}
+    </div>
+  );
 }
 
 /** One results column — all signals or gated signals. */
@@ -684,53 +799,20 @@ export default function Backtest() {
           </div>
 
           <div className="mt-4 flex flex-wrap items-end gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">From</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-[170px] justify-start gap-2 font-mono">
-                    <CalendarDays className="h-4 w-4 shrink-0 opacity-60" />
-                    {effFrom ? toDateInput(effFrom.getTime()) : "—"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={effFrom}
-                    onSelect={setFrom}
-                    defaultMonth={effFrom}
-                    disabled={d =>
-                      (bounds?.min ? d.getTime() < bounds.min - DAY_MS : false) ||
-                      (bounds?.max ? d.getTime() > bounds.max : false)
-                    }
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">To</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-[170px] justify-start gap-2 font-mono">
-                    <CalendarDays className="h-4 w-4 shrink-0 opacity-60" />
-                    {effTo ? toDateInput(effTo.getTime()) : "—"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={effTo}
-                    onSelect={setTo}
-                    defaultMonth={effTo}
-                    disabled={d =>
-                      (bounds?.min ? d.getTime() < bounds.min - DAY_MS : false) ||
-                      (bounds?.max ? d.getTime() > bounds.max : false)
-                    }
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+            <DateField
+              label="From"
+              value={effFrom}
+              onChange={setFrom}
+              min={bounds?.min}
+              max={bounds?.max}
+            />
+            <DateField
+              label="To"
+              value={effTo}
+              onChange={setTo}
+              min={bounds?.min}
+              max={bounds?.max}
+            />
 
             <label className="flex cursor-pointer select-none items-center gap-2 rounded-md border border-border bg-[var(--panel)] px-3 py-2">
               <input
