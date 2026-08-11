@@ -32,6 +32,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 type Strategy = "ml" | "ta" | "blend";
 type TopUpPeriod = "daily" | "weekly" | "monthly" | "yearly";
+type BracketMode = "atr" | "fixed";
 
 const TOP_UP_PERIODS: TopUpPeriod[] = ["daily", "weekly", "monthly", "yearly"];
 
@@ -377,8 +378,18 @@ export default function Backtest() {
 
   const [startBalance, setStartBalance] = useState("25");
   const [leverage, setLeverage] = useState("5");
+  const [bracketMode, setBracketMode] = useState<BracketMode>("atr");
+  // One pair of values per mode. An ATR multiple of 1.5 and a fixed 1.5% are
+  // different animals, so switching must not silently reinterpret the number.
   const [tpK, setTpK] = useState("1.0");
   const [slK, setSlK] = useState("0.5");
+  const [tpPct, setTpPct] = useState("2.0");
+  const [slPct, setSlPct] = useState("1.0");
+  const atrMode = bracketMode === "atr";
+  const tpValue = atrMode ? tpK : tpPct;
+  const slValue = atrMode ? slK : slPct;
+  const setTpValue = atrMode ? setTpK : setTpPct;
+  const setSlValue = atrMode ? setSlK : setSlPct;
   const [strategy, setStrategy] = useState<Strategy>("ml");
   const [blendWeight, setBlendWeight] = useState("0.6");
   const [stakePct, setStakePct] = useState("15");
@@ -388,7 +399,7 @@ export default function Backtest() {
   // Cost model, in basis points for the inputs — traders think in bps, and a
   // percentage field invites a factor-of-100 error on a number this sensitive.
   const [takerFeeBps, setTakerFeeBps] = useState("4");
-  const [slippageBps, setSlippageBps] = useState("2");
+  const [slippageBps, setSlippageBps] = useState("10");
   const [fundingBps, setFundingBps] = useState("1");
   const [gateWarmup, setGateWarmup] = useState("200");
   const [minNotional, setMinNotional] = useState("5");
@@ -406,6 +417,7 @@ export default function Backtest() {
     from: number;
     to: number;
     tpK: number;
+    bracketMode: BracketMode;
     slK: number;
     strategy: Strategy;
     blendWeight: number;
@@ -464,8 +476,9 @@ export default function Backtest() {
       // Cover the whole selected end day.
       from: Date.UTC(effFrom.getFullYear(), effFrom.getMonth(), effFrom.getDate()),
       to: Date.UTC(effTo.getFullYear(), effTo.getMonth(), effTo.getDate()) + DAY_MS - 1,
-      tpK: Number(tpK),
-      slK: Number(slK),
+      tpK: Number(tpValue),
+      slK: Number(slValue),
+      bracketMode,
       strategy,
       blendWeight: Number(blendWeight),
       stakePct: Number(stakePct),
@@ -628,26 +641,48 @@ export default function Backtest() {
               />
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs">Bracket basis</Label>
+              <div className="flex gap-1">
+                {(["atr", "fixed"] as BracketMode[]).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setBracketMode(m)}
+                    aria-pressed={bracketMode === m}
+                    className={`flex-1 rounded-md border px-2 py-2 text-xs font-medium transition-colors ${
+                      bracketMode === m
+                        ? "border-[var(--primary)] text-[var(--primary)]"
+                        : "border-border text-muted-foreground hover:border-border/80"
+                    }`}>
+                    {m === "atr" ? "× ATR" : "Fixed %"}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {atrMode ? "scales with volatility" : "same distance on every pair"}
+              </p>
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="tp" className="text-xs">
-                Take profit (× ATR)
+                Take profit {atrMode ? "(× ATR)" : "(%)"}
               </Label>
               <Input
                 id="tp"
                 inputMode="decimal"
-                value={tpK}
-                onChange={e => setTpK(e.target.value)}
+                value={tpValue}
+                onChange={e => setTpValue(e.target.value)}
                 className="font-mono"
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="sl" className="text-xs">
-                Stop loss (× ATR)
+                Stop loss {atrMode ? "(× ATR)" : "(%)"}
               </Label>
               <Input
                 id="sl"
                 inputMode="decimal"
-                value={slK}
-                onChange={e => setSlK(e.target.value)}
+                value={slValue}
+                onChange={e => setSlValue(e.target.value)}
                 className="font-mono"
               />
             </div>
@@ -875,8 +910,9 @@ export default function Backtest() {
                   ).toFixed(2)} TA`}
               </Badge>
               <span>
-                ${submitted.startBalance} at {submitted.leverage}× · TP {submitted.tpK}×ATR / SL{" "}
-                {submitted.slK}×ATR · stake {submitted.stakePct}% (cap {submitted.maxTotalPct}%) ·{" "}
+                ${submitted.startBalance} at {submitted.leverage}× · TP {submitted.tpK}
+                {submitted.bracketMode === "atr" ? "×ATR" : "%"} / SL {submitted.slK}
+                {submitted.bracketMode === "atr" ? "×ATR" : "%"} · stake {submitted.stakePct}% (cap {submitted.maxTotalPct}%) ·{" "}
                 {submitted.flattenOnClose ? "flat on close" : "hold until TP/SL"} ·{" "}
                 {submitted.symbols.length} pair{submitted.symbols.length === 1 ? "" : "s"} ·{" "}
                 {(submitted.takerFee * 10_000).toFixed(0)}bps taker +{" "}

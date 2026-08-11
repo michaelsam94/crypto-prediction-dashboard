@@ -116,6 +116,7 @@ function runSlice(rows: typeof gated, from: number, to: number, tpK: number) {
     maintenanceMarginRate: MAINTENANCE_MARGIN_RATE,
     topUpAmount: 0,
     topUpPeriod: "monthly",
+    bracketMode: "atr",
   });
 }
 

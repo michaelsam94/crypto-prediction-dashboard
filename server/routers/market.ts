@@ -441,6 +441,7 @@ export const marketRouter = router({
         maintenanceMarginRate: z.number().min(0).max(0.5).default(MAINTENANCE_MARGIN_RATE),
         topUpAmount: z.number().min(0).max(1_000_000).default(0),
         topUpPeriod: z.enum(["daily", "weekly", "monthly", "yearly"]).default("monthly"),
+        bracketMode: z.enum(["atr", "fixed"]).default("atr"),
       }),
     )
     .query(async ({ input }) => {
@@ -530,6 +531,7 @@ export const marketRouter = router({
         maintenanceMarginRate: input.maintenanceMarginRate,
         topUpAmount: input.topUpAmount,
         topUpPeriod: input.topUpPeriod,
+        bracketMode: input.bracketMode,
       };
 
       const costs: CostModel = {

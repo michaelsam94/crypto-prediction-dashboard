@@ -41,7 +41,20 @@ import { FEATURE_NAMES, buildFeatureMatrix } from "./features";
 import type { Kline } from "./binance";
 
 export const TAKER_FEE = 0.0004;
-export const SLIPPAGE = 0.0002;
+/**
+ * Slippage on a taker fill, as a fraction of notional.
+ *
+ * 10bps, not the 2bps this used to assume. Measured over 56 real stop-outs on
+ * the live account: the fill came in a mean 10.28bps and a median 3.06bps worse
+ * than the trigger, with a long tail (one gap filled 209bps past it). A
+ * STOP_MARKET becomes a market order the moment it triggers, so slipping past
+ * the stop is what it is designed to do, not an execution fault.
+ *
+ * The correction is not cosmetic. On the best-performing bracket it moved costs
+ * from 81% to 98% of gross — the difference between a strategy that pays for
+ * its own trading and one that does not.
+ */
+export const SLIPPAGE = 0.001;
 export const MAKER_FEE = 0;
 /** Binance's baseline perp funding rate per 8h settlement. */
 export const FUNDING_PER_8H = 0.0001;
@@ -172,7 +185,27 @@ export type BacktestInput = {
   topUpAmount: number;
   /** How often `topUpAmount` is credited. */
   topUpPeriod: TopUpPeriod;
+  /**
+   * How `tpK` and `slK` are read.
+   *
+   * "atr"   — multiples of the signal bar's ATR%, so a bracket means the same
+   *           thing on a calm major and a violent memecoin.
+   * "fixed" — plain percentages of the entry price, identical on every pair
+   *           and in every regime.
+   */
+  bracketMode: BracketMode;
 };
+
+export type BracketMode = "atr" | "fixed";
+
+/**
+ * Bracket distance as a percentage of entry.
+ *
+ * The only place the two modes differ: under "atr" the multiple scales with the
+ * bar's measured range, under "fixed" it is the percentage itself.
+ */
+export const bracketPct = (mode: BracketMode, k: number, atrPct: number) =>
+  mode === "fixed" ? k : k * atrPct;
 
 export type TopUpPeriod = "daily" | "weekly" | "monthly" | "yearly";
 
@@ -511,6 +544,7 @@ export function resolveTrade(
   slK: number,
   costs: CostModel = DEFAULT_COSTS,
   maintenanceMarginRate: number = MAINTENANCE_MARGIN_RATE,
+  bracketMode: BracketMode = "atr",
 ): TradeResult | null {
   if (!Number.isFinite(atrPct) || atrPct <= 0) return null;
 
@@ -518,8 +552,8 @@ export function resolveTrade(
   const entry = target.open;
   if (!Number.isFinite(entry) || entry <= 0) return null;
 
-  const tpPct = tpK * atrPct;
-  const slPct = slK * atrPct;
+  const tpPct = bracketPct(bracketMode, tpK, atrPct);
+  const slPct = bracketPct(bracketMode, slK, atrPct);
   const tpPx = entry * (1 + (dir * tpPct) / 100);
   const slPx = entry * (1 - (dir * slPct) / 100);
   const liqPx = liquidationPrice(dir, entry, leverage, maintenanceMarginRate);
@@ -745,14 +779,19 @@ export function runBacktest(
         continue;
       }
       const c = candleAt.get(s.symbol)?.get(s.targetOpenTime);
+      // ATR is required even in "fixed" mode, where the brackets do not use it.
+      // Dropping the requirement would let fixed mode trade bars that ATR mode
+      // skips, and the two would no longer be comparable on the same history.
       const atrPct = atrBySymbol.get(s.symbol)?.get(s.basisOpenTime);
       if (!c || atrPct === undefined || !Number.isFinite(atrPct) || atrPct <= 0) continue;
       if (!Number.isFinite(c.open) || c.open <= 0) continue;
 
       const dir: 1 | -1 = s.direction === "LONG" ? 1 : -1;
       const entry = c.open;
-      const tpPx = entry * (1 + (dir * input.tpK * atrPct) / 100);
-      const slPx = entry * (1 - (dir * input.slK * atrPct) / 100);
+      const tpPct = bracketPct(input.bracketMode, input.tpK, atrPct);
+      const slPct = bracketPct(input.bracketMode, input.slK, atrPct);
+      const tpPx = entry * (1 + (dir * tpPct) / 100);
+      const slPx = entry * (1 - (dir * slPct) / 100);
       const liqPx = liquidationPrice(dir, entry, input.leverage, input.maintenanceMarginRate);
       const pos: Position = {
         symbol: s.symbol,

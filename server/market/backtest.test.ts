@@ -4,8 +4,11 @@ import { FEATURE_NAMES } from "./features";
 import {
   DEFAULT_COSTS,
   MAINTENANCE_MARGIN_RATE,
+  SLIPPAGE,
+  TAKER_FEE,
   adverseTrigger,
   applyStrategy,
+  bracketPct,
   applyTrailingGates,
   entryCostRate,
   exitCostRate,
@@ -71,6 +74,7 @@ const cfg = (over: Partial<BacktestInput> = {}): BacktestInput => ({
   maintenanceMarginRate: MAINTENANCE_MARGIN_RATE,
   topUpAmount: 0,
   topUpPeriod: "monthly",
+  bracketMode: "atr",
   ...over,
 });
 
@@ -100,7 +104,7 @@ describe("cost model", () => {
   });
 
   it("charges entry as a taker fill when the entry crosses the spread", () => {
-    expect(entryCostRate(TAKER_ENTRY)).toBeCloseTo(0.0006, 10);
+    expect(entryCostRate(TAKER_ENTRY)).toBeCloseTo(TAKER_FEE + SLIPPAGE, 12);
   });
 
   it("charges a maker entry the maker rate and no slippage", () => {
@@ -114,14 +118,14 @@ describe("cost model", () => {
   it("keeps stop exits taker-priced regardless of how entry filled", () => {
     // A stop is a market order however you got in.
     const makerEntry: CostModel = { ...DEFAULT_COSTS, entryIsMaker: true };
-    expect(exitCostRate(makerEntry, "SL")).toBeCloseTo(0.0006, 10);
+    expect(exitCostRate(makerEntry, "SL")).toBeCloseTo(TAKER_FEE + SLIPPAGE, 12);
     expect(exitCostRate(makerEntry, "TP")).toBe(0);
   });
 
   it("charges a take-profit exit as a maker fill and a stop as a taker fill", () => {
     expect(exitCostRate(DEFAULT_COSTS, "TP")).toBeCloseTo(0, 10);
-    expect(exitCostRate(DEFAULT_COSTS, "SL")).toBeCloseTo(0.0006, 10);
-    expect(exitCostRate(DEFAULT_COSTS, "CLOSE")).toBeCloseTo(0.0006, 10);
+    expect(exitCostRate(DEFAULT_COSTS, "SL")).toBeCloseTo(TAKER_FEE + SLIPPAGE, 12);
+    expect(exitCostRate(DEFAULT_COSTS, "CLOSE")).toBeCloseTo(TAKER_FEE + SLIPPAGE, 12);
   });
 
   it("accrues funding pro-rata: a 4H bar is half an 8h settlement", () => {
@@ -180,7 +184,7 @@ describe("runBacktest costs", () => {
 
     expect(r.trades).toBe(1);
     expect(r.grossPnl).toBeCloseTo(10, 6); // 1% of 1,000 notional
-    expect(r.feesPaid).toBeCloseTo(1_000 * 0.0006, 6); // entry taker only; TP is maker
+    expect(r.feesPaid).toBeCloseTo(1_000 * (TAKER_FEE + SLIPPAGE), 6); // entry taker; TP is maker
     expect(r.fundingPaid).toBeCloseTo(1_000 * 0.0001 * 0.5, 8);
     expect(r.endBalance).toBeCloseTo(1_000 + r.grossPnl - r.feesPaid - r.fundingPaid, 6);
   });
@@ -320,6 +324,67 @@ describe("taScoreFromFeatures", () => {
     );
     expect(hot).toBeCloseTo(1, 10);
     expect(cold).toBeCloseTo(-1, 10);
+  });
+});
+
+describe("bracket mode", () => {
+  const series = (bars: Kline[]) => new Map([["TESTUSDC", bars]]);
+
+  it("reads tpK/slK as ATR multiples under atr mode", () => {
+    expect(bracketPct("atr", 1.5, 2)).toBeCloseTo(3, 10);
+    expect(bracketPct("atr", 0.5, 2)).toBeCloseTo(1, 10);
+  });
+
+  it("reads tpK/slK as plain percentages under fixed mode", () => {
+    expect(bracketPct("fixed", 1.5, 2)).toBe(1.5);
+    expect(bracketPct("fixed", 1.5, 7)).toBe(1.5);
+  });
+
+  it("makes fixed brackets independent of the bar's volatility", () => {
+    // Same 2% favourable move, two very different ATRs. Under fixed mode a 1%
+    // target is hit in both; under atr mode 1xATR is 1% in one and 5% in the
+    // other, so only the calm bar reaches it.
+    const bars = [bar(T0, 100, 102.5, 99.9, 102)];
+    const run = (mode: "atr" | "fixed", atr: number) =>
+      runBacktest(
+        [signal({ targetOpenTime: T0 })],
+        series(bars),
+        new Map([["TESTUSDC", new Map([[T0 - CANDLE_MS, atr]])]]),
+        cfg({ tpK: 1, slK: 1, bracketMode: mode, flattenOnClose: true }),
+        FREE,
+      );
+
+    expect(run("fixed", 1).grossPnl).toBeCloseTo(run("fixed", 5).grossPnl, 10);
+    expect(run("atr", 1).grossPnl).not.toBeCloseTo(run("atr", 5).grossPnl, 6);
+  });
+
+  it("hits a 1% fixed target regardless of a wild ATR", () => {
+    const bars = [bar(T0, 100, 101.5, 99.9, 101)];
+    const r = runBacktest(
+      [signal({ targetOpenTime: T0 })],
+      series(bars),
+      new Map([["TESTUSDC", new Map([[T0 - CANDLE_MS, 9]])]]), // ATR 9%
+      cfg({ tpK: 1, slK: 1, bracketMode: "fixed", flattenOnClose: false }),
+      FREE,
+    );
+    expect(r.trades).toBe(1);
+    expect(r.grossPnl).toBeCloseTo(10, 6); // exactly +1% of 1,000 notional
+  });
+
+  it("still requires ATR in fixed mode so both modes trade the same bars", () => {
+    // No ATR for the signal bar: the trade must be skipped either way, or the
+    // two modes would be measured on different populations.
+    const bars = [bar(T0, 100, 101.5, 99.9, 101)];
+    for (const mode of ["atr", "fixed"] as const) {
+      const r = runBacktest(
+        [signal({ targetOpenTime: T0 })],
+        series(bars),
+        new Map([["TESTUSDC", new Map<number, number>()]]),
+        cfg({ bracketMode: mode }),
+        FREE,
+      );
+      expect(r.trades).toBe(0);
+    }
   });
 });
 
